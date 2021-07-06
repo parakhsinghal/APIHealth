@@ -4,17 +4,17 @@ using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
-using APIHealthCheck.HealthChecks.SQLServer;
-using Microsoft.AspNetCore.Http;
-using APIHealthCheck.HealthChecks.Disk;
-using APIHealthCheck.HealthChecks.Memory;
-using APIHealthCheck.HealthChecks.Processor;
-using APIHealthCheck.HealthChecks.URL;
+using ThinkingCog.AspNetCore.DiskHealthCheck;
+using ThinkingCog.AspNetCore.MemoryHealthCheck;
+using ThinkingCog.AspNetCore.ProcessorLoadHealthCheck;
+using ThinkingCog.AspNetCore.SQLServerHealthCheck;
+using ThinkingCog.AspNetCore.URLHealthCheck;
 
 namespace APIHealthCheck
 {
@@ -36,13 +36,39 @@ namespace APIHealthCheck
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "APIHealthCheck", Version = "v1" });
             });
 
+            var diskHealthCheckSettingsFromConfig = Configuration.GetSection("DiskHealthCheckSettings").Get<DiskHealthCheckOptions>();
+            var sqlServerHealthCheckSettingsFromConfig = Configuration.GetSection("SQLServerHealthCheckSettings").Get<SQLServerHealthCheckOptions>();
+            var memoryHealthCheckSettingsFromConfig = Configuration.GetSection("MemoryHealthCheckSettings").Get<MemoryHealthCheckOptions>();
+            var processorHealthCheckSettingsFromConfig = Configuration.GetSection("ProcessorLoadHealthCheckSettings").Get<ProcessorLoadHealthCheckOptions>(); 
+            var urlHealthCheckSettingsFromConfig = Configuration.GetSection("URLHealthCheckSettings").Get<URLHealthCheckOptions>();
+
             services.AddHealthChecks()
-                     .AddCheck<SQLServerHealthCheck>("LibraryDB health check", HealthStatus.Unhealthy, tags: new string[] { "database", "db", "SQL Server", "sql", "detailed check"})
-                     .AddCheck<DiskHealthCheck>("Disk Health Check", HealthStatus.Unhealthy, tags: new string[] { "disk", "filesystem", "detailed check" })
-                     .AddCheck<MemoryHealthCheck>("Memory Health Check", HealthStatus.Unhealthy, tags: new string[] { "memory", "total memory allocated", "detailed check" })
-                     .AddCheck<ProcessorHealthCheck>("Processor Health Check", HealthStatus.Unhealthy, tags: new string[] { "processor health", "processor load", "detailed check" })
-                     .AddCheck<URLHealthCheck>("URL Health Check", HealthStatus.Unhealthy, tags: new string[] { "url health check", "quickcheck"});
-            
+                    .AddDiskHealthCheck(
+                                diskHealthCheckSettings: diskHealthCheckSettingsFromConfig,
+                                name: "Disk Health Check",
+                                failureStatus: HealthStatus.Unhealthy,
+                                tags: new string[] { "disk health check", "hard disk health check", "quickcheck" })
+                    .AddSQLServerHealthCheck(
+                                sqlServerHealthCheckSettings: sqlServerHealthCheckSettingsFromConfig,
+                                name: "SQL Server Health Check",
+                                failureStatus: HealthStatus.Unhealthy,
+                                tags: new string[] { "sql server", "database" })
+                    .AddMemoryHealthCheck(
+                                memoryHealthCheckSettings: memoryHealthCheckSettingsFromConfig,
+                                name: "Memory Health Check",
+                                failureStatus: HealthStatus.Unhealthy,
+                                tags: new string[] { "memory health check", "memory", "quickcheck" })
+                    .AddProcessorLoadhealthCheck(
+                                processorLoadHealthCheckSettings: processorHealthCheckSettingsFromConfig,
+                                name: "Processor Load Health Check",
+                                failureStatus: HealthStatus.Unhealthy,
+                                tags: new string[] { "processor health", "processor load", "quickcheck" })
+                    .AddURLHealthCheck(
+                                urlHealthCheckSettings: urlHealthCheckSettingsFromConfig,
+                                name: "URL Health Check",
+                                failureStatus: HealthStatus.Unhealthy,
+                                tags: new string[] { "url", "url health check", "quickcheck" });
+
             services.AddScoped<ILibraryRepository, SQLServerRepository>();
         }
 
@@ -67,9 +93,9 @@ namespace APIHealthCheck
                 endpoints.MapControllers();
                 endpoints.MapHealthChecks("/api/health/quickcheck", new HealthCheckOptions()
                 {
-                    Predicate = (check)=>(check.Tags.Contains("quickcheck")),
+                    Predicate = (check) => (check.Tags.Contains("quickcheck")),
                     AllowCachingResponses = false,
-                    ResultStatusCodes =  { 
+                    ResultStatusCodes =  {
                         [HealthStatus.Healthy] = StatusCodes.Status200OK,
                         [HealthStatus.Degraded] = StatusCodes.Status500InternalServerError,
                         [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
